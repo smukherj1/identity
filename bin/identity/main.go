@@ -24,8 +24,19 @@ func main() {
 	if len(*pubKeyPath) == 0 {
 		log.Fatalf("--pub is required.")
 	}
-	_, err := identity.NewManager(*id, *privKeyPath, *pubKeyPath)
+	m, err := identity.NewManager(*id, *privKeyPath, *pubKeyPath)
 	if err != nil {
 		log.Fatalf("Error initializing credentials generator: %v", err)
 	}
+
+	t, err := m.MintToken()
+	if err != nil {
+		log.Fatalf("Error minting token: %v", err)
+	}
+	log.Printf("Token (length=%v): %v", len(t), t)
+	i, err := m.VerifyToken(t)
+	if err != nil {
+		log.Fatalf("Token failed to verify: %v", err)
+	}
+	log.Printf("Verified identity token for principal %v, issued at %v, expiry %v, version %v.", i.Principal, i.IssuedAt, i.ExpiryAt, i.Version)
 }
