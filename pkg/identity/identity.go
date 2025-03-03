@@ -27,9 +27,9 @@ type Identity struct {
 
 type credential struct {
 	// Payload is the base64 encoded JSON object for Identity.
-	Payload string `json:"p"`
+	Payload []byte `json:"p"`
 	// Signature is the base64 encoded signature for the payload.
-	Signature string `json:"s"`
+	Signature []byte `json:"s"`
 }
 
 type Manager struct {
@@ -53,14 +53,12 @@ func (m *Manager) MintToken() (string, error) {
 		return "", fmt.Errorf("unable to convert identity object into JSON: %w", err)
 	}
 
-	ienc := base64.StdEncoding.EncodeToString(iblob)
 	hashed := sha256.Sum256(iblob)
 	sig, err := ecdsa.SignASN1(rand.Reader, m.priv, hashed[:])
 	if err != nil {
 		return "", fmt.Errorf("error signing identity object: %w", err)
 	}
-	senc := base64.StdEncoding.EncodeToString(sig)
-	c := &credential{Payload: ienc, Signature: senc}
+	c := &credential{Payload: iblob, Signature: sig}
 	cblob, err := json.Marshal(c)
 	if err != nil {
 		return "", fmt.Errorf("unable to convert credential object into JSON: %w", err)
@@ -78,20 +76,12 @@ func (m *Manager) VerifyToken(token string) (*Identity, error) {
 	if err := json.Unmarshal(cblob, c); err != nil {
 		return nil, fmt.Errorf("token did not contain a valid JSON credential object: %w", err)
 	}
-	iblob, err := base64.StdEncoding.DecodeString(c.Payload)
-	if err != nil {
-		return nil, fmt.Errorf("credential object in token did not contain a valid base64 encoded identity object: %w", err)
-	}
-	sblob, err := base64.StdEncoding.DecodeString(c.Signature)
-	if err != nil {
-		return nil, fmt.Errorf("credential object in token did not contain a valid base64 encoded signature: %w", err)
-	}
-	ihash := sha256.Sum256(iblob)
-	if !ecdsa.VerifyASN1(m.pub, ihash[:], sblob) {
+	ihash := sha256.Sum256(c.Payload)
+	if !ecdsa.VerifyASN1(m.pub, ihash[:], c.Signature) {
 		return nil, fmt.Errorf("credential failed signature verification")
 	}
 	i := &Identity{}
-	if err := json.Unmarshal(iblob, i); err != nil {
+	if err := json.Unmarshal(c.Payload, i); err != nil {
 		return nil, fmt.Errorf("credential payload did not contain a valid JSON identity object: %w", err)
 	}
 	exp, err := strconv.ParseInt(i.ExpiryAt, 10, 64)
